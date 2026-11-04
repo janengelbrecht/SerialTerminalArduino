@@ -1,0 +1,409 @@
+object FormMain: TFormMain
+  Left = 440
+  Height = 620
+  Top = 151
+  Width = 980
+  Caption = 'Seriel terminal'
+  ClientHeight = 620
+  ClientWidth = 980
+  Color = clBtnFace
+  Font.Color = clWindowText
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
+  Position = poScreenCenter
+  LCLVersion = '4.8.0.0'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  object PanelControls: TPanel
+    Left = 0
+    Height = 175
+    Top = 0
+    Width = 980
+    Align = alTop
+    BevelOuter = bvNone
+    ClientHeight = 175
+    ClientWidth = 980
+    ParentBackground = False
+    TabOrder = 0
+    object GrpPortSettings: TGroupBox
+      Left = 8
+      Height = 160
+      Top = 6
+      Width = 520
+      Caption = ' Serieport Indstillinger (UART / COM) '
+      ClientHeight = 140
+      ClientWidth = 516
+      ParentBackground = False
+      TabOrder = 0
+      object LblPort: TLabel
+        Left = 12
+        Height = 15
+        Top = 10
+        Width = 56
+        Caption = 'COM Port:'
+      end
+      object CbComPort: TComboBox
+        Left = 80
+        Height = 23
+        Top = 6
+        Width = 140
+        ItemHeight = 15
+        Style = csDropDownList
+        TabOrder = 0
+      end
+      object BtnRefreshPorts: TButton
+        Left = 226
+        Height = 25
+        Top = 5
+        Width = 84
+        Caption = 'Genopfrisk'
+        TabOrder = 1
+        OnClick = BtnRefreshPortsClick
+      end
+      object LblBaud: TLabel
+        Left = 12
+        Height = 15
+        Top = 42
+        Width = 56
+        Caption = 'Baud Rate:'
+      end
+      object CbBaudRate: TComboBox
+        Left = 80
+        Height = 23
+        Top = 38
+        Width = 140
+        ItemHeight = 15
+        Items.Strings = (
+          '300'
+          '600'
+          '1200'
+          '2400'
+          '4800'
+          '9600'
+          '14400'
+          '19200'
+          '28800'
+          '38400'
+          '57600'
+          '115200'
+          '230400'
+          '460800'
+          '921600'
+          '1000000'
+          '2000000'
+        )
+        TabOrder = 2
+      end
+      object LblParity: TLabel
+        Left = 12
+        Height = 15
+        Top = 74
+        Width = 56
+        Caption = 'Paritetsbit:'
+      end
+      object CbParity: TComboBox
+        Left = 80
+        Height = 23
+        Top = 70
+        Width = 140
+        ItemHeight = 15
+        Items.Strings = (
+          'Ingen (None - N)'
+          'Ulige (Odd - O)'
+          'Lige (Even - E)'
+          'Mark (M)'
+          'Space (S)'
+        )
+        Style = csDropDownList
+        TabOrder = 3
+      end
+      object LblDataBits: TLabel
+        Left = 325
+        Height = 15
+        Top = 10
+        Width = 46
+        Caption = 'Databits:'
+      end
+      object CbDataBits: TComboBox
+        Left = 390
+        Height = 23
+        Top = 6
+        Width = 110
+        ItemHeight = 15
+        Items.Strings = (
+          '5'
+          '6'
+          '7'
+          '8'
+        )
+        Style = csDropDownList
+        TabOrder = 4
+      end
+      object LblStopBits: TLabel
+        Left = 325
+        Height = 15
+        Top = 42
+        Width = 46
+        Caption = 'Stopbits:'
+      end
+      object CbStopBits: TComboBox
+        Left = 390
+        Height = 23
+        Top = 38
+        Width = 110
+        ItemHeight = 15
+        Items.Strings = (
+          '1 Stop bit'
+          '1.5 Stop bits'
+          '2 Stop bits'
+        )
+        Style = csDropDownList
+        TabOrder = 5
+      end
+      object ChkDTR: TCheckBox
+        Left = 325
+        Height = 19
+        Top = 74
+        Width = 65
+        Caption = 'DTR linie'
+        Checked = True
+        State = cbChecked
+        TabOrder = 6
+        OnChange = ChkDTRChange
+      end
+      object ChkRTS: TCheckBox
+        Left = 410
+        Height = 19
+        Top = 74
+        Width = 63
+        Caption = 'RTS linie'
+        Checked = True
+        State = cbChecked
+        TabOrder = 7
+        OnChange = ChkRTSChange
+      end
+      object BtnConnect: TButton
+        Left = 40
+        Height = 30
+        Top = 102
+        Width = 90
+        Caption = 'Forbind'
+        Font.Style = [fsBold]
+        ParentFont = False
+        TabOrder = 8
+        OnClick = BtnConnectClick
+      end
+      object BtnDisconnect: TButton
+        Left = 138
+        Height = 30
+        Top = 102
+        Width = 85
+        Caption = 'Afbryd'
+        TabOrder = 9
+        OnClick = BtnDisconnectClick
+      end
+      object BtnResetMCU: TButton
+        Left = 230
+        Height = 30
+        Top = 102
+        Width = 105
+        Caption = 'Reset Arduino'
+        TabOrder = 10
+        OnClick = BtnResetMCUClick
+      end
+      object ShapeStatus: TShape
+        Left = 345
+        Height = 24
+        Top = 105
+        Width = 24
+        Brush.Color = clRed
+        Shape = stCircle
+      end
+    end
+    object GrpEncoding: TGroupBox
+      Left = 536
+      Height = 160
+      Top = 6
+      Width = 434
+      Caption = ' Tegnkodning & Protokol '
+      ClientHeight = 140
+      ClientWidth = 430
+      ParentBackground = False
+      TabOrder = 1
+      object LblEncoding: TLabel
+        Left = 12
+        Height = 15
+        Top = 10
+        Width = 73
+        Caption = 'Tegnkodning:'
+      end
+      object CbEncoding: TComboBox
+        Left = 100
+        Height = 23
+        Top = 6
+        Width = 200
+        ItemHeight = 15
+        Items.Strings = (
+          'UTF-8 (Standard Arduino)'
+          'ASCII (7-bit standard)'
+          'ISO-8859-1 (Latin-1 æ ø å)'
+          'Unicode UTF-16 (Little Endian)'
+          'Unicode UTF-16 (Big Endian)'
+          'Modbus ASCII (: Hex LRC CRLF)'
+          'IBM Bisync (SYN/STX/ETX/BCC)'
+        )
+        Style = csDropDownList
+        TabOrder = 0
+      end
+      object ChkTimestamp: TCheckBox
+        Left = 12
+        Height = 19
+        Top = 42
+        Width = 109
+        Caption = 'Tilføj tidsstempel'
+        TabOrder = 1
+      end
+      object ChkAutoScroll: TCheckBox
+        Left = 160
+        Height = 19
+        Top = 42
+        Width = 110
+        Caption = 'Automatisk scroll'
+        Checked = True
+        State = cbChecked
+        TabOrder = 2
+      end
+      object ChkHexView: TCheckBox
+        Left = 300
+        Height = 19
+        Top = 42
+        Width = 102
+        Caption = 'Vis rå HEX bytes'
+        TabOrder = 3
+      end
+      object BtnClear: TButton
+        Left = 12
+        Height = 28
+        Top = 95
+        Width = 110
+        Caption = 'Ryd Terminal'
+        TabOrder = 4
+        OnClick = BtnClearClick
+      end
+    end
+  end
+  object GrpTerminal: TGroupBox
+    Left = 0
+    Height = 377
+    Top = 175
+    Width = 980
+    Align = alClient
+    Caption = 'Modtaget tekst'
+    ClientHeight = 357
+    ClientWidth = 976
+    ParentBackground = False
+    TabOrder = 1
+    OnClick = GrpTerminalClick
+    object MemoTerminal: TMemo
+      Left = 0
+      Height = 357
+      Top = 0
+      Width = 976
+      Align = alClient
+      Color = clBlack
+      Font.CharSet = ANSI_CHARSET
+      Font.Color = clLime
+      Font.Height = -13
+      Font.Name = 'Consolas'
+      Font.Pitch = fpFixed
+      Font.Quality = fqDraft
+      ParentFont = False
+      ReadOnly = True
+      ScrollBars = ssAutoBoth
+      TabOrder = 0
+    end
+  end
+  object PanelBottom: TPanel
+    Left = 0
+    Height = 45
+    Top = 552
+    Width = 980
+    Align = alBottom
+    BevelOuter = bvNone
+    ClientHeight = 45
+    ClientWidth = 980
+    ParentBackground = False
+    TabOrder = 2
+    object EditSend: TEdit
+      Left = 10
+      Height = 23
+      Top = 8
+      Width = 630
+      TabOrder = 0
+      TextHint = 'Indtast tekst eller kommando der skal sendes til Arduino...'
+      OnKeyDown = EditSendKeyDown
+    end
+    object LblLineEnding: TLabel
+      Left = 650
+      Height = 15
+      Top = 12
+      Width = 58
+      Caption = 'Afslutning:'
+    end
+    object CbLineEnding: TComboBox
+      Left = 720
+      Height = 23
+      Top = 8
+      Width = 130
+      ItemHeight = 15
+      Items.Strings = (
+        'CR + LF (\r\n)'
+        'Kun LF (\n)'
+        'Kun CR (\r)'
+        'Ingen'
+      )
+      Style = csDropDownList
+      TabOrder = 1
+    end
+    object BtnSend: TButton
+      Left = 860
+      Height = 28
+      Top = 6
+      Width = 108
+      Caption = 'Send'
+      TabOrder = 2
+      OnClick = BtnSendClick
+    end
+  end
+  object StatusBar1: TStatusBar
+    Left = 0
+    Height = 23
+    Top = 597
+    Width = 980
+    Panels = <    
+      item
+        Text = 'Afbrudt'
+        Width = 250
+      end    
+      item
+        Text = 'RX: 0 bytes'
+        Width = 150
+      end    
+      item
+        Text = 'TX: 0 bytes'
+        Width = 150
+      end    
+      item
+        Text = 'Seriel terminal'
+        Width = 50
+      end>
+    SimplePanel = False
+  end
+  object TimerPoll: TTimer
+    Enabled = False
+    Interval = 25
+    OnTimer = TimerPollTimer
+    Left = 480
+    Top = 90
+  end
+end
