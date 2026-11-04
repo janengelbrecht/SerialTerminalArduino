@@ -78,6 +78,257 @@
  *    - Skriv "MODE" + Enter     -> skifter mellem de tre sendetilstande.
  *
  * ============================================================================
+ * Parameter	    Værdi på Arduino Uno
+ * Baud rate	    57600 bit/s
+ * Parity	None    (ingen)
+ * Antal databit	8
+ * Start bit	    1
+ * Stop bit     	1
+ * Dvs. formatet er 57600 8N1.
+ * ============================================================================
+ *
+ *
+ *  GENNEMGANG AF ALLE SUBRUTINER (funktioner) I PROGRAMMET:
+ *  ---------------------------------------------------------------------------
+ *  Programmet er opdelt i en række små, veldefinerede subrutiner. Hver
+ *  subrutine løser ÉN afgrænset opgave, hvilket gør koden lettere at læse,
+ *  teste og vedligeholde. Nedenfor forklares hver subrutine grundigt —
+ *  både hvad den gør, hvordan den virker, hvornår den kaldes, og hvilke
+ *  parametre den tager/imod.
+ *
+ *  1) my_ultoa() — PORTABEL UNSIGNED-LONG-TO-ASCII
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   char *my_ultoa(unsigned long value, char *buf, int radix);
+ *  Kaldes fra: Mode 2 (Bisync) i loop(), når DISABLE_SNPRINTF er defineret.
+ *  Formål:     Konverterer et unsigned long-tal til en tekststreng i en
+ *              vilkårlig base (radix 2..36). Dette er en erstatning for
+ *              standardbibliotekets ultoa(), som ikke findes på alle
+ *              platforme (mangler f.eks. på ESP32/ESP8266).
+ *  Virkemåde:  Funktionen arbejder i tre trin:
+ *                a) Radix-tjek: hvis radix er uden for 2..36, returneres
+ *                   en tom streng (buf[0] = '\0').
+ *                b) Særtilfælde: hvis value == 0, skrives '0' direkte.
+ *                c) Generelt: cifrene beregnes bagfra ved at tage value % radix
+ *                   gentagne gange, gemmes i en midlertidig buffer (tmp[33]),
+ *                   og kopieres derefter i omvendt rækkefølge til buf.
+ *              Cifre > 9 repræsenteres med 'A'..'Z' (store bogstaver).
+ *  Returnerer: Pointer til buf (samme buffer som input) — så funktionen kan
+ *              bruges direkte i udtryk som strcat(buf, my_ultoa(...)).
+ *  Buffer:     tmp[33] er dimensioneret til maks. 32 binære cifre + null —
+ *              nok til alle 32-bit værdier i alle baser.
+ *
+ *  2) enqueueMode() — LÆG MODE-SKIFT I KØ
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static bool enqueueMode(int newMode);
+ *  Kaldes fra: handleCommand() når brugeren sender "MODE".
+ *  Formål:     Lægger et ønsket mode-skift (0, 1 eller 2) i en cirkulær
+ *              kø, så det kan anvendes sikkert i loop() uden race conditions.
+ *  Virkemåde:  Hvis køen er fuld (modeQueueCount >= MODE_QUEUE_SIZE),
+ *              returneres false uden at ændre noget. Ellers skrives newMode
+ *              på tail-position, tail flyttes én frem (med wrap via modulo),
+ *              og count øges med 1.
+ *  Returnerer: true ved succes, false hvis køen er fuld.
+ *  Hvorfor kø? Kommandoer kan modtages hurtigere end loop() når at behandle
+ *              dem. Køen sikrer, at ALLE "MODE"-kommandoer registreres i
+ *              den rækkefølge de blev modtaget.
+ *
+ *  3) dequeueMode() — TAG NÆSTE MODE-SKIFT FRA KØ
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static int dequeueMode();
+ *  Kaldes fra: loop() i starten af hver gennemløb (i en while-løkke).
+ *  Formål:     Henter det ældste ventende mode-skift fra køen.
+ *  Virkemåde:  Hvis køen er tom (count <= 0), returneres -1 som signal.
+ *              Ellers læses modeQueue[head], head flyttes én frem (wrap),
+ *              count mindskes med 1, og værdien returneres.
+ *  Returnerer: Mode-værdien (0, 1 eller 2) — eller -1 hvis køen er tom.
+ *  Bemærk:     -1 kan ikke være en gyldig mode (mode er altid 0..2), så
+ *              loop() kan bruge "-1" som "tom"-signal uden problemer.
+ *
+ *  4) peekLastQueuedMode() — KIG PÅ SIDSTE ELEMENT I KØ UDEN AT FJERNE DET
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static int peekLastQueuedMode();
+ *  Kaldes fra: handleCommand() når brugeren sender "MODE".
+ *  Formål:     Læser det SIDSTE element i køen (eller det nuværende mode,
+ *              hvis køen er tom — signaleret med -1), så handleCommand kan
+ *              beregne det KORREKTE næste mode, selv om der allerede ligger
+ *              ventende skift i køen.
+ *  Virkemåde:  Hvis køen er tom, returneres -1. Ellers beregnes indekset
+ *              for det sidste element som (head + count - 1) % SIZE — dette
+ *              er den korrekte formel uanset om køen er "wrapped" eller ej.
+ *  Returnerer: Sidste mode-værdi i køen — eller -1 hvis køen er tom.
+ *  Eksempel:   mode=0, kø=[1,2]. peekLastQueuedMode() returnerer 2, så
+ *              næste skift bliver (2+1)%3 = 0 — korrekt!
+ *
+ *  5) my_strcasecmp() — CASE-INSENSITIV STRENG-SAMMENLIGNING
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static int my_strcasecmp(const char *a, const char *b);
+ *  Kaldes fra: handleCommand() til at sammenligne kommandoer.
+ *  Formål:     Sammenligner to null-terminerede strenge uden at skelne
+ *              mellem store og små bogstaver. Dette gør, at brugeren kan
+ *              skrive "led_on", "LED_ON", "Led_On" osv. — alt accepteres.
+ *  Virkemåde:  Løber gennem begge strenge tegn for tegn. Hvert tegn
+ *              normaliseres: hvis det er 'A'..'Z', lægges ('a'-'A') til,
+ *              så det bliver 'a'..'z'. Hvis tegnene er forskellige,
+ *              returneres deres differens. Når begge strenge er slut,
+ *              returneres 0 (ens).
+ *  Returnerer: 0 hvis strengene er ens, <0 hvis a < b, >0 hvis a > b.
+ *  Hvorfor egen? Standard-C's strcasecmp er POSIX, ikke ISO C. På nogle
+ *              indlejrede platforme findes den ikke i <string.h>. Derfor
+ *              implementerer vi den selv — kun få linjer kode.
+ *  Sikkerhed:  Bruger (unsigned char)-cast, så tegn > 127 (danske bogstaver,
+ *              UTF-8 bytes osv.) ikke giver negative sammenligninger.
+ *
+ *  6) modbusLRC() — MODBUS ASCII LONGITUDINAL REDUNDANCY CHECK
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static uint8_t modbusLRC(const uint8_t *data, size_t len);
+ *  Kaldes fra: Mode 1 (Modbus) i loop().
+ *  Formål:     Beregner den LRC (Longitudinal Redundancy Check), som bruges
+ *              i Modbus ASCII-frames. LRC er en simpel checksum, der gør
+ *              det muligt for modtageren at opdage transmissionsfejl.
+ *  Virkemåde:  Alle bytes i data[] summeres i en 8-bit akkumulator (sum +=
+ *              data[i]). Derefter returneres to's komplement: -sum.
+ *              Bemærk at (uint8_t)(-(int8_t)sum) er den korrekte måde at
+ *              udtrykke "to's komplement af sum" på i C, uanset om sum er
+ *              < 0x80 eller >= 0x80.
+ *  Returnerer: Én byte — LRC-værdien.
+ *  Eksempel:   Frame {0x01,0x03,0x04,0x01,0xF4,0x00,0x2A} summerer til 0x27,
+ *              og LRC bliver 0xD9. Dette er det samme som de fleste
+ *              Modbus-referenceimplementeringer giver.
+ *
+ *  7) bisyncBCC() — IBM BISYNC BLOCK CHECK CHARACTER (FORENKLET)
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static uint8_t bisyncBCC(const char *payload, size_t len);
+ *  Kaldes fra: Mode 2 (Bisync) i loop().
+ *  Formål:     Beregner en BCC (Block Check Character) til Bisync-frames.
+ *              Dette er en FORENKLET variant — simpel XOR af alle bytes —
+ *              ikke den rigtige IBM Bisync CRC-16. Den er kun kompatibel
+ *              med en modtager, der bruger PRÆCIS samme variant.
+ *  Virkemåde:  bcc starter på 0. For hvert tegn i payload udføres bcc ^=
+ *              payload[i]. Resultatet er XOR-summen af alle bytes.
+ *  Returnerer: Én byte — XOR-summen.
+ *  Bemærk:     Rigtig IBM Bisync kan bruge CRC-16 eller LRC afhængigt af
+ *              variant. Denne forenklede XOR er valgt, fordi den er nem at
+ *              implementere, og fordi demoen kun skal vise, at Lazarus kan
+ *              afkode en Bisync-lignende frame.
+ *
+ *  8) printHexByte() — SKRIV EN BYTE SOM TO HEX-CIFRE
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static void printHexByte(uint8_t b);
+ *  Kaldes fra: Mode 1 (Modbus) i loop() — både for frame-bytes og LRC.
+ *  Formål:     Sender én byte ud på Serial som to hex-cifre (store bogstaver),
+ *              f.eks. 0x1F -> "1F". Bruges til at bygge Modbus ASCII-frames,
+ *              hvor alle bytes repræsenteres som hex-tekst.
+ *  Virkemåde:  En statisk hex-tabel ("0123456789ABCDEF") bruges til at slå
+ *              op. Høje nibble ((b >> 4) & 0x0F) og lave nibble (b & 0x0F)
+ *              sendes hver som ét tegn via Serial.write().
+ *  Returnerer: intet.
+ *  Eksempel:   printHexByte(0x2A) sender '2' og 'A' ud.
+ *  Hvorfor Serial.write og ikke Serial.print? Serial.write sender RÅ bytes,
+ *              mens Serial.print ville formatere som decimal. Vi vil have
+ *              præcis to tegn ud — derfor write().
+ *
+ *  9) ledOn() — TÆND LED (HÅNDTERER POLARITET)
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static void ledOn();
+ *  Kaldes fra: handleCommand() ved "LED_ON", og indirekte fra setup() (via
+ *              ledOff()).
+ *  Formål:     Tænder LED'en uanset om den er aktiv HIGH eller aktiv LOW.
+ *  Virkemåde:  Bruger LED_ACTIVE_LOW-makroen til at vælge:
+ *                - LED_ACTIVE_LOW == true  -> digitalWrite(LED_PIN, LOW)
+ *                - LED_ACTIVE_LOW == false -> digitalWrite(LED_PIN, HIGH)
+ *  Returnerer: intet.
+ *  Hvorfor abstraktion? Resten af koden skal ikke bekymre sig om, hvilken
+ *              platform den kører på — den kalder bare ledOn(). Det gør
+ *              portabilitet meget nemmere.
+ *
+ *  10) ledOff() — SLUK LED (HÅNDTERER POLARITET)
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static void ledOff();
+ *  Kaldes fra: setup() (for at sikre LED er slukket ved opstart) og
+ *              handleCommand() ved "LED_OFF".
+ *  Formål:     Slukker LED'en uanset polaritet — det modsatte af ledOn().
+ *  Virkemåde:  Bruger LED_ACTIVE_LOW-makroen til at vælge:
+ *                - LED_ACTIVE_LOW == true  -> digitalWrite(LED_PIN, HIGH)
+ *                - LED_ACTIVE_LOW == false -> digitalWrite(LED_PIN, LOW)
+ *  Returnerer: intet.
+ *
+ *  11) handleCommand() — BEHANDL EN MODTAGET KOMMANDO
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   static void handleCommand(char *cmd);
+ *  Kaldes fra: loop() når et '\n' eller '\r' er modtaget, og cmdIndex > 0.
+ *  Formål:     Sammenligner den modtagne kommando med de fire kendte
+ *              kommandoer (LED_ON, LED_OFF, MODE, PING) og udfører den
+ *              tilsvarende handling. Ukendte kommandoer besvares med en
+ *              hjælpebesked.
+ *  Virkemåde:  - Først printes kommandoen tilbage til brugeren (feedback).
+ *              - Derefter en if/else-if-kæde med my_strcasecmp() for hver
+ *                kommando (case-insensitiv).
+ *              - "LED_ON"  -> ledOn() + bekræftelse.
+ *              - "LED_OFF" -> ledOff() + bekræftelse.
+ *              - "MODE"    -> beregn næste mode. Hvis der allerede ligger
+ *                             ventende skift i køen, tages udgangspunkt i
+ *                             det SIDSTE kø-element (via peekLastQueuedMode),
+ *                             ellers i det nuværende mode. Skiftet lægges i
+ *                             køen via enqueueMode(). Ved fuld kø udskrives
+ *                             fejlbesked.
+ *              - "PING"    -> svar "PONG".
+ *              - Andet     -> hjælpebesked med de gyldige kommandoer.
+ *  Returnerer: intet.
+ *  Bemærk:     Funktionen MODTAGER en null-termineret streng. Den ejer ikke
+ *              strengen — den læser kun fra den. Derfor kan loop() sende
+ *              sin lokale kopi (localCmd) uden problemer.
+ *
+ *  12) setup() — INITIALISERING (KØRES ÉN GANG)
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   void setup();
+ *  Kaldes fra: Arduino-frameworket automatisk ved opstart.
+ *  Formål:     Klargør hardware og seriel kommunikation til brug.
+ *  Virkemåde:  - Sætter LED_PIN til OUTPUT og slukker LED'en med ledOff()
+ *                (vigtigt: først HER ved vi, hvilken polaritet der gælder).
+ *              - Starter Serial med BAUD_RATE.
+ *              - På boards med native USB (ESP32, STM32, SAMD, USBCON) ventes
+ *                1000 ms, så USB-host når at åbne porten — ellers kan de
+ *                første tegn gå tabt.
+ *              - Udskriver et velkomstbanner med platform-navn, baudrate
+ *                og en liste over kommandoer.
+ *  Returnerer: intet.
+ *
+ *  13) loop() — HOVEDLØKKEN (KØRES UENDELIGT)
+ *  ---------------------------------------------------------------------------
+ *  Signatur:   void loop();
+ *  Kaldes fra: Arduino-frameworket automatisk — så hurtigt som muligt,
+ *              igen og igen, indtil boardet slukkes.
+ *  Formål:     Programmet gør fire ting i hver gennemløb, i denne rækkefølge:
+ *                a) Tøm mode-køen: anvend alle ventende mode-skift og
+ *                   udskriv besked for hvert.
+ *                b) Hvis der er gået >= 1000 ms siden sidste send: send én
+ *                   linje i den aktuelle mode (telemetri/Modbus/Bisync).
+ *                c) Læs alle tilgængelige bytes fra Serial. Tegn samles i
+ *                   cmdBuffer, indtil '\n' eller '\r' — så kaldes
+ *                   handleCommand(). Buffer-overløb kasserer kommandoen.
+ *                d) Hvis en halv kommando har ventet > 500 ms, kasseres
+ *                   den med en timeout-besked.
+ *              Alt er NON-BLOCKING: ingen delay() i loop() — boardet kan
+ *              derfor både sende og modtage samtidigt.
+ *  Returnerer: intet.
+ *  Timing:     - Telemetri sendes hvert 1000 ms (uafhængigt af mode).
+ *              - Kommandoer behandles straks de modtages (så snart '\n' ses).
+ *              - Timeout for halve kommandoer er 500 ms.
+ *
+ *  KALDSHIERARKI (hvem kalder hvem):
+ *  ---------------------------------------------------------------------------
+ *    setup()          -> ledOff()
+ *    loop()           -> dequeueMode()               (tøm kø)
+ *                     -> modbusLRC(), printHexByte() (Mode 1)
+ *                     -> bisyncBCC()                 (Mode 2)
+ *                     -> my_ultoa()                  (Mode 2, kun DISABLE_SNPRINTF)
+ *                     -> handleCommand()
+ *    handleCommand()  -> my_strcasecmp()
+ *                     -> ledOn(), ledOff()
+ *                     -> peekLastQueuedMode()
+ *                     -> enqueueMode()
+ *
+ * ============================================================================
  */
 
 /* ----------------------------------------------------------------------------
@@ -89,9 +340,42 @@
 #include <math.h>           // sin() — bruges til simuleret temperatur
 #include <string.h>         // strlen, memcpy, strcpy, strcat — strengfunktioner
 #include <stdint.h>         // uint8_t, uint16_t, uint32_t — faste heltalstyper
+#include <stdlib.h>         // ultoa() — bruges i DISABLE_SNPRINTF-grenen (Mode 2)
 #ifndef DISABLE_SNPRINTF
   #include <stdio.h>        // snprintf — bruges til at bygge payload-streng
 #endif
+
+/* ----------------------------------------------------------------------------
+ *  [R15] PORTABEL ultoa-ERSTATNING
+ *  ----------------------------------------------------------------------------
+ *  ultoa() findes ikke på alle platforme (mangler f.eks. på ESP32/ESP8266).
+ *  Vi definerer derfor vores egen, som kan bruges overalt. Bruges kun i
+ *  DISABLE_SNPRINTF-grenen (Mode 2) for at spare flash på AVR.
+ * -------------------------------------------------------------------------- */
+static char *my_ultoa(unsigned long value, char *buf, int radix) {
+  char tmp[33];                                           // Midlertidig buffer (maks 32 bit + null)
+  int  i = 0;                                             // Indeks i tmp
+  int  j = 0;                                             // Indeks i buf
+  if (radix < 2 || radix > 36) {                          // Ugyldig base?
+    buf[0] = '\0';                                        // Ja — tom streng
+    return buf;                                           // Returnér
+  }                                                       // Slut på radix-tjek
+  if (value == 0) {                                       // Særttilfælde: 0
+    buf[0] = '0';                                         // Skriv '0'
+    buf[1] = '\0';                                        // Null-terminér
+    return buf;                                           // Returnér
+  }                                                       // Slut på nul-tjek
+  while (value > 0) {                                     // Så længe der er cifre tilbage
+    unsigned int digit = (unsigned int)(value % (unsigned long)radix);  // Beregn ciffer
+    tmp[i++] = (char)(digit < 10 ? ('0' + digit) : ('A' + digit - 10));  // Gem ciffer
+    value /= (unsigned long)radix;                        // Fjern ciffer fra værdi
+  }                                                       // Slut på while-løkke
+  while (i > 0) {                                         // Løb baglæns gennem tmp
+    buf[j++] = tmp[--i];                                  // Kopiér i omvendt orden
+  }                                                       // Slut på kopi-løkke
+  buf[j] = '\0';                                          // Null-terminér
+  return buf;                                             // Returnér buf
+}                                                         // Slut på my_ultoa
 
 
 /* ----------------------------------------------------------------------------
@@ -150,6 +434,17 @@ static int dequeueMode() {                                // Funktion: tag mode 
   return v;                                               // Returnér den læste mode
 }                                                         // Slut på dequeueMode
 
+/* Hjælpefunktion: læs sidste element i køen UDEN at fjerne det.
+ * Returnerer -1 hvis køen er tom. Bruger (head + count - 1) % SIZE,
+ * som er den korrekte formel uanset om køen er wrapped eller ej. */
+static int peekLastQueuedMode() {                         // Funktion: kig på sidste i køen
+  if (modeQueueCount <= 0) {                              // Er køen tom?
+    return -1;                                            // Ja — signalér tom
+  }                                                       // Slut på tom-tjek
+  int lastIndex = (modeQueueHead + modeQueueCount - 1) % MODE_QUEUE_SIZE;  // Korrekt sidste-indeks
+  return modeQueue[lastIndex];                            // Returnér sidste element
+}                                                         // Slut på peekLastQueuedMode
+
 
 /* ----------------------------------------------------------------------------
  *  SEKTION 2: PLATFORMVALG AF LED OG ADC
@@ -175,6 +470,9 @@ static int dequeueMode() {                                // Funktion: tag mode 
   #define PLATFORM_NAME   "ESP8266"                       // Navn til velkomstbanner
 
 #elif defined(ARDUINO_ARCH_STM32)                         // Er vi på STM32?
+  #ifndef LED_BUILTIN                                     // Er LED_BUILTIN ikke defineret af core?
+    #define LED_BUILTIN PC13                              // Fallback: Blue Pill's LED på PC13
+  #endif                                                  // Slut på LED_BUILTIN-fallback
   #define LED_PIN         LED_BUILTIN                     // Boardets indbyggede LED (ofte PC13)
   #define LED_ACTIVE_LOW  true                            // PC13 på Blue Pill er aktiv LOW
   #define ADC_PIN         PA0                             // PA0 = ADC1-kanal 0
@@ -417,7 +715,7 @@ void loop() {                                             // loop() kaldes i det
         char payload[40];                                 // Buffer til payload-tekst
         strcpy(payload, "BISYNC_PAKKE_NR_");              // Kopiér fast prefix
         char numbuf[12];                                  // Buffer til tal
-        ultoa(counter, numbuf, 10);                       // Konvertér counter til tekst
+        my_ultoa(counter, numbuf, 10);                    // Konvertér counter til tekst (portabel)
         strcat(payload, numbuf);                          // Tilføj tal til payload
 #endif                                                    // Slut på snprintf-valg
         size_t plen = strlen(payload);                    // Længde af payload
@@ -481,8 +779,8 @@ static void handleCommand(char *cmd) {                    // Funktion: behandl �
 
   } else if (my_strcasecmp(cmd, "MODE") == 0) {           // Er kommandoen MODE?
     int nextMode = (mode + 1) % 3;                        // Beregn næste mode (0->1->2->0)
-    if (modeQueueCount > 0) {                             // Er der allerede ventende skift?
-      int lastQueued = modeQueue[modeQueueTail - 1 < 0 ? MODE_QUEUE_SIZE - 1 : modeQueueTail - 1];  // Læs sidste i kø
+    int lastQueued = peekLastQueuedMode();                // Læs sidste i kø (korrekt formel)
+    if (lastQueued >= 0) {                                // Er der allerede ventende skift?
       nextMode = (lastQueued + 1) % 3;                    // Basér næste på sidste i kø (ikke nuværende)
     }                                                     // Slut på kø-tjek
     if (enqueueMode(nextMode)) {                          // Læg skiftet i køen
