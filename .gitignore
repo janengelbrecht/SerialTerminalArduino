@@ -1,0 +1,47 @@
+# --- Free Pascal / Lazarus ---
+*.ppu
+*.o
+*.a
+*.compiled
+*.bak
+*.exe
+*.dll
+*.so
+*.dylib
+*.lps
+*.res
+*.or
+*.compiled
+*.dbg
+*.dSYM/
+backup/
+lib/
+units/
+bin/
+build/
+__history/
+__recovery/
+
+# --- Lazarus automatisk genereret ---
+*.lpi.bak
+*.lpr.bak
+*.pas.bak
+*.lfm.bak
+*.lps.bak
+
+# --- OS-artefakter ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+
+# --- IDE-artefakter ---
+*.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Midlertidige filer ---
+*.tmp
+*.log

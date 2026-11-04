@@ -1,0 +1,40 @@
+# EditorConfig hjælper med at opretholde konsistent kodestil
+# på tværs af editorer og IDE'er.
+# Se https://editorconfig.org for detaljer.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.pas]
+indent_size = 2
+# Pascal-filer bruger 2-space indentation i dette projekt
+
+[*.lfm]
+indent_size = 2
+
+[*.lpr]
+indent_size = 2
+
+[*.lpi]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+# Markdown bruger to efterfølgende mellemrum til linjeskift — bevar dem
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.ino]
+indent_size = 2
+# Arduino sketch følger Arduino-stil med 2-space indentation
+
+[*.txt]
+trim_trailing_whitespace = false

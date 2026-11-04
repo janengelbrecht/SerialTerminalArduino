@@ -1,0 +1,182 @@
+Kravspecifikation — SerialTerminal (revideret til Windows-only)
+Dokument ID: ST-SRS-001
+Version: 1.1
+Dato: 2026-11-04
+Klassifikation: Intern / Leverandør
+Standarder: ISO/IEC/IEEE 29148:2018, IEEE 830 (arv), EU CRA 2024/2847
+
+Ændringshistorik
+Version	Dato	Forfatter	Begrundelse
+1.0	2026-11-04	—	Baseline
+1.1	2026-11-04	—	Programmet skal kun køre på Windows. Alle krav vedrørende Linux og macOS er fjernet. Kravnummerering er opdateret, og indholdsmæssigt volumen er bevaret.
+1. Introduktion
+1.1 Formål
+Dette dokument specificerer de funktionelle og ikke-funktionelle krav til SerialTerminal — en Windows-baseret seriel terminal skrevet i Free Pascal/Lazarus til kommunikation med mikrokontrollere (Arduino, ESP32, STM32 m.fl.). Dokumentet er udformet i overensstemmelse med ISO/IEC/IEEE 29148:2018's krav til "System Requirements Specification" og opfylder de dokumentations- og sporbarhedskrav, som anvendes i software- og elektronikvirksomheder i USA, EU og Asien.
+
+1.2 Anvendelsesområde
+Systemet består af fire kildefiler: SerialTerminal.lpr, unitmain.pas, synaser.pas og SerialTerminal.lpi. Målet er et selvstændigt, kompilerbart Lazarus-projekt, der kan bygges på Windows (32/64-bit) uden eksterne afhængigheder ud over Free Pascal/Lazarus-økosystemet.
+
+1.3 Definitioner og forkortelser
+Term	Definition
+MCU	Mikrokontroller (Arduino, ESP32, STM32)
+DTR/RTS	Serielle kontrolsignaler (Data Terminal Ready / Request To Send)
+Non-blocking	I/O-operation der returnerer øjeblikkeligt uden at vente på data
+Polling	Periodisk forespørgsel efter data i stedet for interrupt/callback
+LCL	Lazarus Component Library
+CRA	EU Cyber Resilience Act (Forordning 2024/2847)
+DCB	Device Control Block (Windows seriel konfigurationsstruktur)
+1.4 Referencer
+ID	Reference
+REF-01	ISO/IEC/IEEE 29148:2018 — Requirements engineering
+REF-02	IEEE Std 830-1993 — Recommended Practice for SRS
+REF-03	EU Forordning 2024/2847 — Cyber Resilience Act
+REF-04	Free Pascal Language Reference (fpc-documentation)
+REF-05	Lazarus Documentation (lazarus-ide.org)
+REF-06	Synapse Serial Library (BSD/Public Domain)
+REF-07	Microsoft Windows Serial Communications API (CreateFileA/DCB/COMMTIMEOUTS)
+2. Overordnet beskrivelse
+2.1 Produktperspektiv
+SerialTerminal er en fritstående GUI-applikation til Windows. Den interagerer med operativsystemets serielle API (CreateFileA/DCB/COMMTIMEOUTS) via den indlejrede driver synaser.pas. Der er ingen netværkskommunikation, ingen database og ingen eksterne runtime-afhængigheder.
+
+2.2 Produktfunktioner (oversigt)
+ID	Funktion
+F-01	Detektering af fysisk tilstedeværende serielle porte
+F-02	Åbning og konfiguration af seriel port (baud, bits, paritet, stopbits)
+F-03	Non-blocking datalæsning via polling (TTimer)
+F-04	Datalagring og -visning med streaming-semantik
+F-05	Tegnkodningsafkodning (UTF-8, ASCII, Latin-1, UTF-16 LE/BE)
+F-06	Protokolafkodning (Modbus ASCII, IBM Bisync)
+F-07	Afsendelse af kommandoer med valgbar linjeafslutning
+F-08	Hardware-reset af MCU via DTR-puls
+F-09	Manuel DTR/RTS-styring
+F-10	Hukommelsesværn for terminalvisning
+2.3 Brugerkarakteristika
+Brugertype	Beskrivelse
+Embedded-udvikler	Softwareudvikler med behov for telemetri, kommandoafsendelse og protokolinspektion
+Hardware-ingeniør	Elektronikingeniør med behov for at verificere UART-signaler og MCU-adfærd
+Studerende/underviser	Brugere af terminalen i undervisningssammenhæng
+2.4 Begrænsninger
+ID	Begrænsning
+CON-01	Systemet kræver Free Pascal Compiler (FPC) ≥ 3.2.0 og Lazarus ≥ 2.2.0
+CON-02	Systemet understøtter kun Windows (32/64-bit); Linux og macOS understøttes ikke
+CON-03	Der er ingen kryptering eller autentificering af seriel kommunikation (ikke relevant for fysisk tilsluttet UART)
+CON-04	Systemet kræver, at brugeren har læse-/skriveadgang til COM-porten via Windows' rettighedsmodel
+2.5 Antagelser og afhængigheder
+ID	Antagelse
+ASM-01	Brugeren har fysisk adgang til den serielle port (USB/RS-232)
+ASM-02	MCU'en anvender standard UART-konfiguration (8N1 som default)
+ASM-03	Operativsystemet stiller en fungerende Windows seriel driver til rådighed
+ASM-04	Brugeren har de nødvendige rettigheder til at tilgå COM-porten
+3. Specifikke krav
+Konvention: Alle krav anvender verbet "skal" (shall). Hvert krav har en unik ID og en verifikationsmetode (T = test, I = inspektion, A = analyse, D = demonstration).
+
+3.1 Funktionelle krav
+3.1.1 Portdetektering
+ID	Krav	Verifikation
+FR-001	Systemet skal detektere og returnere en kommasepareret liste af fysisk tilstedeværende serielle porte ved at læse HKEY_LOCAL_MACHINE\HARDWARE\DEVICEMAP\SERIALCOMM og verificere hver kandidat med CreateFileA.	T
+FR-002	Systemet skal medtage en port i listen, selvom CreateFileA returnerer ERROR_ACCESS_DENIED (porten er optaget af en anden proces), for at muliggøre brugerdiagnose.	T
+FR-003	Systemet skal udelade en port fra listen, hvis CreateFileA returnerer ERROR_FILE_NOT_FOUND.	T
+FR-004	Systemet skal vise en pladsholdertekst, der starter med (, når ingen fysisk port findes, og deaktivere [Forbind]-knappen.	T
+FR-005	Systemet skal genindlæse portlisten efter en forbindelsesfejl eller USB-frakobling for at afspejle den aktuelle fysiske tilstand.	T
+3.1.2 Forbindelse og konfiguration
+ID	Krav	Verifikation
+FR-006	Systemet skal åbne en seriel port med eksklusiv adgang (CreateFileA med share-mode 0).	T
+FR-007	Systemet skal konfigurere baudrate, databits (5–8), paritet (N/O/E/M/S) og stopbits (1/1.5/2) via DCB/SetCommState.	T
+FR-008	Systemet skal sætte læse-timeouts til non-blocking adfærd (ReadIntervalTimeout = MAXDWORD, ReadTotalTimeoutConstant = 0).	I
+FR-009	Systemet skal sætte skrive-timeout til 500 ms for at undgå uendelig blokering.	I
+FR-010	Systemet skal rapportere OS-specifikke fejlkoder og -beskrivelser via LastError og LastErrorDesc ved forbindelsesfejl.	T
+FR-011	Systemet skal sætte DTR og RTS i overensstemmelse med checkbox-tilstande efter portkonfiguration, så driverens DCB-initialisering ikke overskriver værdierne.	T
+3.1.3 Datalæsning
+ID	Krav	Verifikation
+FR-012	Systemet skal anvende en TTimer med interval 50–100 ms til polling af porten, når forbindelsen er aktiv.	T
+FR-013	Systemet skal læse præcis det antal bytes, som WaitingData rapporterer tilgængelige, med timeout 0 (non-blocking).	T
+FR-014	Systemet skal opdatere RX-tælleren som Int64 ved hver læsning.	T
+FR-015	Systemet skal håndtere undtagelser under læsning (f.eks. USB-frakobling) ved at stoppe timeren, nulstille FIsConnected, opdatere UI, logge fejlen og genindlæse portlisten.	T
+3.1.4 Afkodning og visning
+ID	Krav	Verifikation
+FR-016	Systemet skal understøtte følgende visningstilstande: UTF-8, ASCII, ISO-8859-1, UTF-16 LE, UTF-16 BE, Modbus ASCII og IBM Bisync.	T
+FR-017	Systemet skal konvertere ISO-8859-1 til UTF-8 før visning i TMemo, så danske tegn (æ, ø, å) vises korrekt.	T
+FR-018	Systemet skal erstatte ikke-printbare ASCII-tegn med . i ASCII-tilstand, mens CR, LF og TAB bevares.	T
+FR-019	Systemet skal indsætte [MODBUS START :] og [END CRLF] i Modbus ASCII-tilstand.	T
+FR-020	Systemet skal erstatte IBM Bisync-styretegn (SYN, STX, ETX, EOT, ENQ, ACK, NAK, DLE, ETB) med læsbare tags.	T
+FR-021	Systemet skal understøtte hex-visning (ChkHexView), hvor hver byte vises som to hex-cifre med mellemrum som separator.	T
+FR-022	Systemet skal indsætte tekst i TMemo via SelStart/SelText for at bevare Serial.print()-semantik (delvise linjer fortsætter på samme linje).	T
+FR-023	Systemet skal begrænse TMemo til maksimalt 2500 linjer og slette de ældste ned til 1500 linjer, når grænsen overskrides, under anvendelse af BeginUpdate/EndUpdate.	T
+FR-024	Systemet skal understøtte tidsstempler i formatet [hh:nn:ss.zzz], der kun tilføjes ved starten af en ny logisk linje (tom forrige linje eller tom Memo).	T
+FR-025	Systemet skal understøtte auto-scroll til bunden, når ChkAutoScroll er aktiveret.	T
+3.1.5 Afsendelse
+ID	Krav	Verifikation
+FR-026	Systemet skal sende brugerens input fra EditSend via driverens SendString.	T
+FR-027	Systemet skal understøtte fire linjeafslutningsvalg: CR+LF (#13#10), LF (#10), CR (#13) og ingen.	T
+FR-028	Systemet skal aktivere afsendelse via Enter-tasten i EditSend (OnKeyDown, Key = 13) og nulstille Key for at forhindre indsættelse af CR i feltet.	T
+FR-029	Systemet skal opdatere TX-tælleren som Int64 efter vellykket afsendelse.	T
+FR-030	Systemet skal afvise afsendelse, når FIsConnected er False eller EditSend.Text er tom.	T
+3.1.6 Hardware-reset
+ID	Krav	Verifikation
+FR-031	Systemet skal understøtte en DTR-puls (Lav → 150 ms → Høj) for at genstarte MCU'en.	T
+FR-032	Systemet skal kræve aktiv forbindelse for at udføre hardware-reset.	T
+FR-033	Systemet skal informere brugeren om, at bootloader'en typisk venter ~1.5 sekunder efter reset.	T
+3.1.7 Manuel DTR/RTS-styring
+ID	Krav	Verifikation
+FR-034	Systemet skal straks anvende checkbox-tilstande for DTR og RTS på den fysiske port, når forbindelsen er aktiv.	T
+FR-035	Systemet skal gemme checkbox-tilstande til brug ved næste forbindelse, når forbindelsen ikke er aktiv.	T
+3.2 Ikke-funktionelle krav
+3.2.1 Portabilitet og platform
+ID	Krav	Verifikation
+NFR-001	Systemet skal kunne kompileres med Free Pascal ≥ 3.2.0 og Lazarus ≥ 2.2.0 på Windows (32/64-bit).	T
+NFR-002	Systemet skal anvende betinget kompilering ({$IFDEF WINDOWS}) til at isolere platformspecifik kode i synaser.pas.	I
+NFR-003	Systemet skal ikke indeholde kode, der forudsætter POSIX-API'er (termios, fpread, O_NONBLOCK) i den aktive Windows-kompilationsgren.	I
+3.2.2 Ydeevne
+ID	Krav	Verifikation
+NFR-004	Systemet skal håndtere en kontinuerlig datastrøm ved 115200 baud (~11.5 KB/s) uden at miste data eller fryse GUI'en.	T
+NFR-005	Systemet skal begrænse GUI-opdateringer til ét per timer-tick (50–100 ms) for at undgå overdreven repaint.	A
+NFR-006	Systemet skal anvende Int64 til byte-tællere for at undgå overflow ved sessioner > 2 GB.	I
+3.2.3 Pålidelighed og robusthed
+ID	Krav	Verifikation
+NFR-007	Systemet skal håndtere USB-frakobling under kørsel uden at crashe, ved at fange undtagelser og genoprette en konsistent tilstand.	T
+NFR-008	TBlockSerial.CloseSocket skal være idempotent (kan kaldes flere gange uden skade).	T
+NFR-009	TFormMain.FormClose skal frigive TBlockSerial-instansen (FreeAndNil) for at undgå hukommelseslæk.	I
+NFR-010	Systemet skal anvende try/except omkring alle Windows-API-kald, der kan kaste undtagelser (læsning, skrivning, konfiguration).	I
+3.2.4 Sikkerhed (EU CRA-overensstemmelse)
+ID	Krav	Verifikation
+NFR-011	Systemet skal være "secure by design" ved ikke at eksponere netværkslyttere, ikke at indsamle telemetri og ikke at kræve forhøjede rettigheder (CRA Art. 10).	I
+NFR-012	Systemet skal dokumentere eventuelle kendte begrænsninger i sikkerhedsrelevante funktioner (f.eks. manglende kryptering af seriel data) i README-filen.	I
+NFR-013	Systemet skal ikke indeholde tredjepartskomponenter med kendte uafhjulpne sikkerhedssårbarheder på tidspunktet for frigivelse.	I
+3.2.5 Vedligeholdelse og kodekvalitet
+ID	Krav	Verifikation
+NFR-014	Kodebasen skal følge Object Pascal-konventioner med {MODE OBJFPC}{H+} og undgå platformspecifikke API-kald uden for betinget kompilering.	I
+NFR-015	Alle offentlige metoder og properties i synaser.pas og unitmain.pas skal have dokumenterende kommentarer i samme stil som synaser_dokumentation.pas.	I
+NFR-016	Systemet skal undgå brug af Sleep i GUI-tråden ud over den dokumenterede 150 ms DTR-puls.	A
+3.2.6 Brugergrænseflade
+ID	Krav	Verifikation
+NFR-017	Systemet skal deaktivere portparametre (ComboBoxes) under aktiv forbindelse for at forhindre inkonsistente tilstande.	T
+NFR-018	Systemet skal vise forbindelsesstatus via farvet TShape (grøn = forbundet, rød = ikke forbundet) og tekst i StatusBar1.Panels[0].	T
+NFR-019	Systemet skal vise handlingsorienterede fejlbeskeder (f.eks. "Tjek at Arduino IDE Serial Monitor ikke er åben") ved forbindelsesfejl.	T
+4. Verifikationsmatrix (uddrag)
+Krav-ID	Verifikationsmetode	Acceptkriterium
+FR-001	Test på Windows med tilsluttet Arduino	Porten vises i listen
+FR-006	Test med port optaget af andet program	Fejlkode 5 returneres, port medtages i liste
+FR-012	Mål GUI-respons ved 115200 baud i 60 sek	Ingen frysing, RX-tæller stiger monotont
+FR-022	Send Serial.print("A") efterfulgt af Serial.println("B")	Memo viser AB på samme linje
+FR-023	Send > 3000 linjer	Memo indeholder ≤ 2500 linjer, ældste slettet
+NFR-001	Kompiler på Windows (32/64-bit)	Ingen fejl, executable genereres
+NFR-007	Træk USB ud under aktiv læsning	Ingen crash, fejl logges, UI opdateres
+5. Sporbarhed og konfigurationsstyring
+Element	Krav
+Krav-ID	Unik og stabil over tid (ISO/IEC/IEEE 29148 §5.2.8)
+Ændringshistorik	Alle ændringer i krav skal registreres med dato, forfatter og begrundelse
+Sporbarhed	Hvert krav skal kunne spores til en eller flere testcases
+Baseline	Version 1.0 udgør baseline for Release 1.0; version 1.1 er Windows-only-baseline
+6. Bilag A — Filstruktur og ansvarsfordeling
+Fil	Ansvar
+SerialTerminal.lpr	Program-entry, LCL-initialisering
+unitmain.pas	GUI, event-handlers, polling, afkodning, visning
+synaser.pas	Seriel driver: portdetektering, Connect/Config/Read/Write, DTR/RTS (Windows-gren)
+SerialTerminal.lpi	Lazarus projektkonfiguration, compiler-indstillinger, afhængigheder
+Godkendelse
+Rolle	Navn	Dato	Signatur
+Systemansvarlig			
+Kvalitetsansvarlig			
+Projektleder			
+Dette dokument er udarbejdet under hensyntagen til ISO/IEC/IEEE 29148:2018's krav til kravspecifikationer og EU's Cyber Resilience Act's dokumentationskrav for produkter med digitale elementer. Programmet er i denne version begrænset til Windows-platformen; alle krav vedrørende Linux og macOS er fjernet, og kravnummereringen er opdateret tilsvarende, mens det indholdsmæssige volumen er bevaret.
+
