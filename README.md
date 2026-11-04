@@ -1,4 +1,4 @@
-# SerialTerminal — Avanceret Lazarus / Free Pascal Seriel Terminal
+# SerialTerminal — Avanceret seriel terminal
 
 **Dokument ID:** ST-README-002  
 **Standarder:** ISO/IEC/IEEE 29148:2018, EU CRA 2024/2847 (Secure by design)  
@@ -10,7 +10,7 @@ Programmet adskiller sig fra standardterminaler ved at have en fuldstændig **no
 
 ---
 
-## 🏗 Arkitektur & Designvalg
+## 🏗 Arkitektur & designvalg
 
 ### "Pull, ikke push" (Polling-model)
 For at sikre fuldstændig stabilitet og undgå race-conditions, anvender programmet ikke en traditionel, separat læsetråd. I stedet polles den serielle port via en `TTimer` (50–100 ms interval). Ved baudrates op til 2.000.000 (f.eks. 115200 baud = ~11.5 KB/s) er dette rigeligt til at tømme operativsystemets 4 KB RX-buffer, uden at grafiske opdateringer fryser vinduet. Læsningen (via `RecvBufferStr`) kaldes med en timeout på 0 ms, hvilket gør operationen 100% non-blocking.
@@ -21,7 +21,7 @@ Dette sikrer, at porten åbnes med eksklusiv adgang (share-mode 0), hvilket forh
 
 ---
 
-## 🌟 Detaljerede Funktioner
+## 🌟 Detaljerede funktioner
 
 ### 1. Dobbeltverificeret Portdetektering
 Terminalen viser *kun* porte, der fysisk eksisterer på maskinen. 
@@ -29,12 +29,12 @@ Terminalen viser *kun* porte, der fysisk eksisterer på maskinen.
 * **Verifikation:** Alle fundne porte testes med `CreateFileA`. 
 * **Optaget-status:** Hvis en port returnerer `ERROR_ACCESS_DENIED` eller `ERROR_SHARING_VIOLATION`, inkluderes porten stadig i listen, da den fysisk eksisterer, men er låst af f.eks. Arduino IDE. Brugeren får i så fald en handlingsorienteret fejlbesked med hjælp til at løse problemet.
 
-### 2. Streaming-semantik & Hukommelsesværn
+### 2. Streaming-semantik & hukommelsesbeskyttelse
 * **Bevarer `Serial.print()`:** Modsat simple terminaler, der tvinger linjeskift ind ved hver læsning, indsætter SerialTerminal data direkte i tekstbufferen via `SelStart` og `SelText`. Dette betyder, at en `Serial.print("A")` fulgt af `Serial.print("B")` vises korrekt som `AB` på samme linje.
 * **Tidsstempler:** Tidsstempler (`[hh:nn:ss.zzz]`) tilføjes *kun* ved starten af en ny logisk linje, så layoutet af telemetrien bevares.
 * **Hukommelsesværn (Rolling Window):** Modtages ekstreme mængder data, begrænses terminalen automatisk. Når linjeantallet overstiger 2500, suspenderes UI-opdateringer (`BeginUpdate`), og de ældste linjer slettes, indtil der er 1500 linjer tilbage. Dette sikrer, at applikationen kan køre i dagevis ved høje baudrates uden at Windows' `RichEdit`-kerne bryder sammen.
 
-### 3. Avanceret Tegn- og Protokolafkodning
+### 3. Avanceret tegn- og protokolafkodning
 Terminalen tillader on-the-fly afkodning af indgående bytes via dispatcher-motoren i `unitmain.pas`:
 
 | Kodning/Protokol | Beskrivelse & Adfærd |
@@ -53,7 +53,7 @@ Terminalen tillader on-the-fly afkodning af indgående bytes via dispatcher-moto
 
 ---
 
-## ⚙️ Systemkrav og Installation
+## ⚙️ Systemkrav og installation
 
 ### Begrænsninger og Krav (CON-01 til CON-04)
 * **OS:** Windows (32/64-bit). *(macOS og Linux understøttes ikke i denne specifikke distribution).*
@@ -68,7 +68,7 @@ Terminalen tillader on-the-fly afkodning af indgående bytes via dispatcher-moto
 
 ---
 
-## 📖 Brugervejledning til Daglig Brug
+## 📖 Brugervejledning til daglig brug
 
 1. **Tilslutning:** Sæt din Arduino/ESP32 i USB-porten. Klik evt. på **[Genopfrisk]** i programmet, hvis det allerede var åbent.
 2. **Forbind:**
